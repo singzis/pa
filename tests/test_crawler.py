@@ -28,6 +28,7 @@ IMAGES = {
     "/small.png": png("yellow", (5, 5)),
     "/second.png": png("purple"),
     "/flaky.png": png("orange"),
+    "/framed.png": png("cyan"),
 }
 
 
@@ -51,6 +52,25 @@ class Site(BaseHTTPRequestHandler):
             content_type = "text/html"
         elif self.path == "/page2":
             body = b"<html><body><img src='/second.png'></body></html>"
+            content_type = "text/html"
+        elif self.path == "/frame":
+            body = (b"<html><body><iframe src='/inner' width='250' "
+                    b"height='250'></iframe></body></html>")
+            content_type = "text/html"
+        elif self.path == "/inner":
+            body = b"""<html><body style='min-height:2000px'>
+              <div style='margin-top:1000px'><img id='framed'></div>
+              <script>addEventListener('scroll', () => {
+                if (scrollY > 400) document.querySelector('#framed').src = '/framed.png';
+              });</script></body></html>"""
+            content_type = "text/html"
+        elif self.path == "/redirect":
+            target = "http://localhost:{}/login".format(self.server.server_port)
+            body = ("<html><body><img src='/a.png'><script>setTimeout(() => "
+                    "location.href='{}', 150)</script></body></html>".format(target)).encode()
+            content_type = "text/html"
+        elif self.path == "/login":
+            body = b"<html><body>Login required</body></html>"
             content_type = "text/html"
         elif self.path == "/flaky.png":
             type(self).flaky_requests += 1
@@ -139,6 +159,20 @@ class CrawlerTest(unittest.TestCase):
                 Image.new("RGB", (40, 40), "red").save(output, format=image_format)
                 store.save(1, self.url, self.url + "/" + image_format, output.getvalue())
             self.assertEqual(store.counts["saved"], 4)
+
+    def test_images_lazy_loaded_inside_iframe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            url = self.url.replace("/page1", "/frame")
+            options = CrawlOptions(url, Path(directory), 1, 20, 0, 0, {"PNG"})
+            counts = crawl(options)
+            self.assertEqual(counts["saved"], 1)
+
+    def test_offsite_redirect_is_not_reported_as_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            url = self.url.replace("/page1", "/redirect")
+            options = CrawlOptions(url, Path(directory), 1, 20, 0, 0, {"PNG"})
+            with self.assertRaisesRegex(RuntimeError, "登录|域名"):
+                crawl(options)
 
 
 if __name__ == "__main__":
