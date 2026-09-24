@@ -14,6 +14,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="下载网页实际加载的位图")
     parser.add_argument("url", help="起始网页 URL")
     parser.add_argument("--manual-login", action="store_true", help="打开浏览器并等待手动登录")
+    parser.add_argument("--auth-state", type=Path, help="读取或保存登录状态的 JSON 文件")
     parser.add_argument("--next-selector", help="下一页按钮的 CSS 选择器")
     parser.add_argument("--max-pages", type=int, default=1, help="最多访问页数，默认 1")
     parser.add_argument("--max-images", type=int, default=200, help="最多处理图片数，默认 200")
@@ -32,6 +33,10 @@ def main() -> None:
         parser.error("最小尺寸不能为负数")
     if args.max_pages > 1 and not args.next_selector:
         parser.error("翻页时必须指定 --next-selector")
+    if args.auth_state and args.auth_state.exists() and not args.auth_state.is_file():
+        parser.error("--auth-state 必须是文件路径")
+    if args.auth_state and not args.manual_login and not args.auth_state.is_file():
+        parser.error("登录状态文件不存在；首次使用请同时指定 --manual-login")
     names = [name.strip().lower() for name in args.formats.split(",")]
     if not names or any(name not in FORMAT_NAMES for name in names):
         parser.error("--formats 仅支持 png,jpeg,jpg,webp,gif")
@@ -41,6 +46,7 @@ def main() -> None:
         max_images=args.max_images, min_width=args.min_width,
         min_height=args.min_height, formats={FORMAT_NAMES[name] for name in names},
         manual_login=args.manual_login, next_selector=args.next_selector,
+        auth_state=args.auth_state,
     )
     try:
         counts = crawl(options)

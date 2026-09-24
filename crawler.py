@@ -1,5 +1,8 @@
 """Discover images loaded by a browser and visit a bounded set of pages."""
 
+import json
+import os
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +32,7 @@ class CrawlOptions:
     formats: Set[str]
     manual_login: bool = False
     next_selector: Optional[str] = None
+    auth_state: Optional[Path] = None
 
 
 def _site(url: str) -> str:
@@ -142,6 +146,20 @@ def _next_page(page: Page, selector: str, hostname: str) -> bool:
             or set(_image_urls(page)) != old_images)
 
 
+def _save_auth_state(context: BrowserContext, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent,
+                                         delete=False) as handle:
+            temporary = Path(handle.name)
+            json.dump(context.storage_state(indexed_db=True), handle)
+        os.replace(str(temporary), str(path))
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+
+
 def crawl(options: CrawlOptions) -> Dict[str, int]:
     hostname = _site(options.url)
     store = ImageStore(options.output, hostname, options.min_width,
@@ -149,7 +167,10 @@ def crawl(options: CrawlOptions) -> Dict[str, int]:
     attempted = 0
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=not options.manual_login)
-        context = browser.new_context()
+        context = browser.new_context(
+            storage_state=str(options.auth_state)
+            if options.auth_state and options.auth_state.exists() else None
+        )
         page = context.new_page()
         responses: Dict[str, bytes] = {}
         offsite_navigation = False
@@ -214,6 +235,8 @@ def crawl(options: CrawlOptions) -> Dict[str, int]:
                     break
                 if offsite_navigation:
                     raise RuntimeError("下一页跳出了起始域名")
+            if options.manual_login and options.auth_state:
+                _save_auth_state(context, options.auth_state)
         finally:
             browser.close()
     return store.counts

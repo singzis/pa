@@ -2,11 +2,14 @@
 
 import csv
 import io
+import json
+import stat
 import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -71,6 +74,20 @@ class Site(BaseHTTPRequestHandler):
             content_type = "text/html"
         elif self.path == "/login":
             body = b"<html><body>Login required</body></html>"
+            content_type = "text/html"
+            self.send_response(200)
+            self.send_header("Set-Cookie", "session=ok; Path=/; HttpOnly")
+            self.send_header("Content-Type", content_type)
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        elif self.path == "/protected":
+            if "session=ok" not in self.headers.get("Cookie", ""):
+                self.send_response(302)
+                self.send_header("Location", "/login")
+                self.end_headers()
+                return
+            body = b"<html><body><img src='/a.png'></body></html>"
             content_type = "text/html"
         elif self.path == "/flaky.png":
             type(self).flaky_requests += 1
@@ -173,6 +190,25 @@ class CrawlerTest(unittest.TestCase):
             options = CrawlOptions(url, Path(directory), 1, 20, 0, 0, {"PNG"})
             with self.assertRaisesRegex(RuntimeError, "登录|域名"):
                 crawl(options)
+
+    def test_login_state_is_saved_and_reused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            auth_state = root / ".auth" / "site.json"
+            url = self.url.replace("/page1", "/protected")
+            first = CrawlOptions(url, root / "first", 1, 20, 0, 0, {"PNG"},
+                                 manual_login=True, auth_state=auth_state)
+            with patch("builtins.input", return_value=""):
+                self.assertEqual(crawl(first)["saved"], 1)
+            self.assertTrue(auth_state.is_file())
+            self.assertEqual(stat.S_IMODE(auth_state.stat().st_mode), 0o600)
+            with auth_state.open(encoding="utf-8") as handle:
+                state = json.load(handle)
+            self.assertTrue(any(cookie["name"] == "session" for cookie in state["cookies"]))
+
+            second = CrawlOptions(url, root / "second", 1, 20, 0, 0, {"PNG"},
+                                  auth_state=auth_state)
+            self.assertEqual(crawl(second)["saved"], 1)
 
 
 if __name__ == "__main__":

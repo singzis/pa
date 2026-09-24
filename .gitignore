@@ -11,3 +11,6 @@ wheels/
 
 # Downloaded images and manifest
 images/
+
+# Browser authentication state contains session credentials
+.auth/
