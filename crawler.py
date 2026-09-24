@@ -199,10 +199,24 @@ def crawl(options: CrawlOptions) -> Dict[str, int]:
         try:
             page.goto(options.url, wait_until="domcontentloaded", timeout=30000)
             if options.manual_login:
-                input("请在浏览器中完成登录，然后按回车开始抓取：")
-                responses.clear()
+                while True:
+                    input("请完成登录，确认浏览器已返回目标页面后按回车开始抓取：")
+                    page.wait_for_timeout(500)
+                    if _site(page.url) != hostname:
+                        print("浏览器尚未返回目标站点，请继续登录。")
+                        continue
+                    current = urlsplit(page.url)
+                    target = urlsplit(options.url)
+                    if (current.path, current.query, current.fragment) != \
+                            (target.path, target.query, target.fragment):
+                        responses.clear()
+                        page.goto(options.url, wait_until="domcontentloaded", timeout=30000)
+                        page.wait_for_timeout(500)
+                        if _site(page.url) != hostname:
+                            print("目标页面尚未打开，请继续完成登录。")
+                            continue
+                    break
                 offsite_navigation = False
-                page.goto(options.url, wait_until="domcontentloaded", timeout=30000)
             for page_number in range(1, options.max_pages + 1):
                 if offsite_navigation or _site(page.url) != hostname:
                     raise RuntimeError("页面已离开起始域名；需要登录时请使用 --manual-login")

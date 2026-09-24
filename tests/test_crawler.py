@@ -6,6 +6,7 @@ import json
 import stat
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -37,6 +38,7 @@ IMAGES = {
 
 class Site(BaseHTTPRequestHandler):
     flaky_requests = 0
+    protected_visits = 0
 
     def log_message(self, *_args):
         pass
@@ -73,7 +75,8 @@ class Site(BaseHTTPRequestHandler):
                     "location.href='{}', 150)</script></body></html>".format(target)).encode()
             content_type = "text/html"
         elif self.path == "/login":
-            body = b"<html><body>Login required</body></html>"
+            body = (b"<html><body>Login required<script>setTimeout(() => "
+                    b"location.href='/protected', 100)</script></body></html>")
             content_type = "text/html"
             self.send_response(200)
             self.send_header("Set-Cookie", "session=ok; Path=/; HttpOnly")
@@ -87,6 +90,7 @@ class Site(BaseHTTPRequestHandler):
                 self.send_header("Location", "/login")
                 self.end_headers()
                 return
+            type(self).protected_visits += 1
             body = b"<html><body><img src='/a.png'></body></html>"
             content_type = "text/html"
         elif self.path == "/flaky.png":
@@ -193,13 +197,15 @@ class CrawlerTest(unittest.TestCase):
 
     def test_login_state_is_saved_and_reused(self):
         with tempfile.TemporaryDirectory() as directory:
+            Site.protected_visits = 0
             root = Path(directory)
             auth_state = root / ".auth" / "site.json"
             url = self.url.replace("/page1", "/protected")
             first = CrawlOptions(url, root / "first", 1, 20, 0, 0, {"PNG"},
                                  manual_login=True, auth_state=auth_state)
-            with patch("builtins.input", return_value=""):
+            with patch("builtins.input", side_effect=lambda _prompt: time.sleep(0.5)):
                 self.assertEqual(crawl(first)["saved"], 1)
+            self.assertEqual(Site.protected_visits, 1)
             self.assertTrue(auth_state.is_file())
             self.assertEqual(stat.S_IMODE(auth_state.stat().st_mode), 0o600)
             with auth_state.open(encoding="utf-8") as handle:

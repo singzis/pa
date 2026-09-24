@@ -27,4 +27,6 @@ uv run python main.py "https://example.com/gallery" --auth-state .auth/jd.json
 
 对于京东等会跳转到单点登录的站点，请使用 `--manual-login`。程序会扫描并滚动页面内的 iframe；如果仍未完成登录，会明确报错，不会把登录页或浏览器错误页算作抓取结果。建议为每个任务指定独立的 `--output`，避免与之前的下载结果混在一起。
 
+按回车前请确认浏览器已返回目标页面。回车后程序开始抓取；抓取结束或失败时浏览器都会自动关闭，请查看终端汇总和 `manifest.csv` 判断结果。
+
 首次登录时加 `--auth-state .auth/jd.json`，登录并抓取成功后会保存 Cookie 和浏览器存储；后续运行只加 `--auth-state .auth/jd.json` 即可复用。登录状态可能过期，届时重新运行手动登录命令。该文件包含可用于登录的敏感信息，`.auth/` 已加入 Git 忽略规则，请勿提交或发送给他人。
