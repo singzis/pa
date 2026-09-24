@@ -1,9 +1,10 @@
 [project]
 name = "ctach"
 version = "0.1.0"
-description = "Add your description here"
+description = "Browser-based image crawler"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
+    "pillow>=11.3,<12",
     "playwright>=1.60.0",
 ]
