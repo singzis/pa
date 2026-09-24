@@ -1,8 +1,8 @@
-import page
+from page import ffn
 
 def main():
     print("Hello from ctach!")
-    page.ffn()
+    ffn()
 
 
 if __name__ == "__main__":
